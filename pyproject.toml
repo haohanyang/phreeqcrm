@@ -12,9 +12,13 @@ version = "0.0.19"
 description = "A reaction module for transport simulators based on the geochemical model PHREEQC."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "BSD-3-Clause AND LicenseRef-USGS-Public-Domain"
+license-files = [
+    "LICENSE"
+]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+  "License :: OSI Approved :: BSD Software License",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
