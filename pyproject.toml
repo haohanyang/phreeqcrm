@@ -18,7 +18,6 @@ license-files = [
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
-  "License :: OSI Approved :: BSD Software License",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
@@ -31,7 +30,7 @@ dependencies = [
 ]
 
 [tool.scikit-build]
-cmake.minimum-version = "3.22"
+cmake.version = ">=3.22"
 build.verbose = true
 
 [dependency-groups]
