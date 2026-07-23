@@ -62,18 +62,19 @@ set_property(SOURCE ${phreeqcrm_INTERFACE_FULLPATH} APPEND PROPERTY DEPENDS
 if(PHREEQCRM_BUILD_MPI)
   # Set preprocessor definition on the .i file so that it gets passed to SWIG
   set_property(SOURCE ${phreeqcrm_INTERFACE_FULLPATH} APPEND PROPERTY COMPILE_DEFINITIONS USE_MPI)
+  set(_mpi4py_include_output "${Python_SITELIB}/mpi4py/include")
 
   # Determine the include directory for mpi4py
-  execute_process(
-    COMMAND ${Python_EXECUTABLE} -c "import mpi4py; from mpi4py import MPI; print(mpi4py.get_include())"
-    RESULT_VARIABLE _mpi4py_include_result
-    OUTPUT_VARIABLE _mpi4py_include_output
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    ERROR_QUIET
-  )
-  if(NOT ${_mpi4py_include_result} STREQUAL "0")
-    message(FATAL_ERROR "Python module \"mpi4py\" not found. Please install it in your Python environment.")
-  endif()
+  # execute_process(
+  #   COMMAND ${Python_EXECUTABLE} -c "import mpi4py; from mpi4py import MPI; print(mpi4py.get_include())"
+  #   RESULT_VARIABLE _mpi4py_include_result
+  #   OUTPUT_VARIABLE _mpi4py_include_output
+  #   OUTPUT_STRIP_TRAILING_WHITESPACE
+  #   ERROR_QUIET
+  # )
+  # if(NOT ${_mpi4py_include_result} STREQUAL "0")
+  #   message(FATAL_ERROR "Python module \"mpi4py\" not found. Please install it in your Python environment.")
+  # endif()
 
   # Convert to cmake path list and set include directory for mpi4py
   cmake_path(CONVERT ${_mpi4py_include_output} TO_CMAKE_PATH_LIST MPI4PY_INCLUDE_DIR)

@@ -7,7 +7,7 @@ requires = [
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "phreeqcrm"
+name = "phreeqcrm-mpi"
 version = "0.0.20"
 description = "A reaction module for transport simulators based on the geochemical model PHREEQC."
 readme = "README.md"
@@ -32,6 +32,7 @@ dependencies = [
 [tool.scikit-build]
 cmake.version = ">=3.22"
 build.verbose = true
+cmake.args = ["-DPHREEQCRM_BUILD_MPI=ON"]
 
 [dependency-groups]
 dev = [

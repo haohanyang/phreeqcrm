@@ -24,7 +24,7 @@
 %pythoncode 
 %{ 
 import numpy as np
-import phreeqcrm
+from . import phreeqcrm
 from enum import Enum, unique
 import inspect 
 
