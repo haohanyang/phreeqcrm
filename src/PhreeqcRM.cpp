@@ -9944,7 +9944,7 @@ PhreeqcRM::RunCells()
 		r_vector.resize(this->nthreads);
 #ifdef USE_OPENMP
 #if defined(swig_python_EXPORTS)
-		Py_BEGIN_ALLOW_THREADS
+		// Py_BEGIN_ALLOW_THREADS
 #endif
 		omp_set_num_threads(this->nthreads);
 #pragma omp parallel
@@ -9956,7 +9956,7 @@ PhreeqcRM::RunCells()
 		}
 #ifdef USE_OPENMP
 #if defined(swig_python_EXPORTS)
-		Py_END_ALLOW_THREADS
+		// Py_END_ALLOW_THREADS
 #endif
 #endif
 		if (this->partition_uz_solids)
@@ -10272,7 +10272,7 @@ PhreeqcRM::RunCellsThread(int n)
 	IRM_RESULT return_value = IRM_OK;
 
 #if defined(USE_OPENMP) && defined(swig_python_EXPORTS)
-	PyGILState_STATE gstate = PyGILState_Ensure();
+	// PyGILState_STATE gstate = PyGILState_Ensure();
 #endif
 
 	try
@@ -10577,7 +10577,7 @@ PhreeqcRM::RunCellsThread(int n)
 		return_value = IRM_FAIL;
 	}
 #if defined(USE_OPENMP) && defined(swig_python_EXPORTS)
-	PyGILState_Release(gstate);
+	// PyGILState_Release(gstate);
 #endif
 	return return_value;
 }

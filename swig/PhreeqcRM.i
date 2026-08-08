@@ -1,4 +1,4 @@
-%module(directors="1") phreeqcrm
+%module(directors="1", threads="1") phreeqcrm
 %module phreeqcrm
 
 %begin %{
