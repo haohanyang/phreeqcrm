@@ -32,6 +32,7 @@ dependencies = [
 [tool.scikit-build]
 cmake.version = ">=3.22"
 build.verbose = true
+cmake.args = ["-DDUSE_OPENMP=ON"]
 
 [dependency-groups]
 dev = [
