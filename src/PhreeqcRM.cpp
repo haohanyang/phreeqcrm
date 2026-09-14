@@ -10447,6 +10447,9 @@ PhreeqcRM::RunCellsThread(int n)
 					input << "  -time_step  " << this->time_step << "\n";
 					input << "  -cells      " << i << "\n";
 					input << "END" << "\n";
+					if (std::getenv("PRINT_CELL") != nullptr) {
+						printf("Thread %d: Cell %d Starts\n", n, i);
+					}
 					if (phast_iphreeqc_worker->RunString(input.str().c_str()) != 0)
 					{
 						if (this->GetErrorHandlerMode() < 3)
@@ -10459,6 +10462,9 @@ PhreeqcRM::RunCellsThread(int n)
 						{
 							calculation_success = false;
 						}
+					}
+					if (std::getenv("PRINT_CELL") != nullptr) {
+						printf("Thread %d: Cell %d Ends\n", n, i);
 					}
 				}
 				if (active && calculation_success)
