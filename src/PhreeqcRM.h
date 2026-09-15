@@ -5758,6 +5758,9 @@ private:
 	void                                      RebalanceLoad(void);
 	void                                      RebalanceLoadPerCell(void);
 	IRM_RESULT                                RunCellsThread(int i);
+	void                                      RunCell(int i);
+	void                                      BeforeRunCellsThread(int n);
+	void                                      AfterRunCellsThread(int n);
 	IRM_RESULT                                RunFileThread(int n);
 	IRM_RESULT                                RunStringThread(int n, std::string & input);
 	IRM_RESULT                                RunCellsThreadNoPrint(int n);
