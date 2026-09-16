@@ -16,7 +16,7 @@
 #else
 #define MP_TYPE int
 #endif
-
+#include <utility>
 // forward declarations
 class cxxNameDouble;
 class cxxSolution;
@@ -5754,10 +5754,14 @@ private:
 	void                                      GatherNchem(std::vector< double > &source, std::vector< double > &destination);
 	cxxStorageBin &                           Get_phreeqc_bin(void) {return *this->phreeqc_bin;}
 	IRM_RESULT                                HandleErrorsInternal(std::vector< int > & r);
+	IRM_RESULT                                HandleErrorsInternal2(std::vector< std::pair<int, int> > & r);
 	void                                      PartitionUZ(int n, int iphrq, int ihst, double new_frac);
 	void                                      RebalanceLoad(void);
 	void                                      RebalanceLoadPerCell(void);
 	IRM_RESULT                                RunCellsThread(int i);
+	IRM_RESULT                                RunCell(int n, int i);
+	void                                      BeforeRunCellsThread(int n);
+	void                                      AfterRunCellsThread(int n);
 	IRM_RESULT                                RunFileThread(int n);
 	IRM_RESULT                                RunStringThread(int n, std::string & input);
 	IRM_RESULT                                RunCellsThreadNoPrint(int n);
