@@ -9957,7 +9957,7 @@ PhreeqcRM::RunCells()
 		}
 
 		#pragma omp parallel for num_threads(this->nthreads) schedule(dynamic, 4)
-		for (int i = 0; i < 100; ++i) {
+		for (int i = 0; i < this->nxyz; ++i) {
 			RunCell(i);
 		}
 
@@ -9996,13 +9996,13 @@ PhreeqcRM::RunCells()
 #endif
 		// Rebalance load
 		double t0 = CLOCK();
-		this->RebalanceLoad();
-		if (mpi_myself == 0 && nthreads > 1)
-		{
-			std::ostringstream msg;
-			msg << "          Time rebalancing load             " << ((double) CLOCK() - t0) << "\n";
-			this->ScreenMessage(msg.str().c_str());
-		}
+		// this->RebalanceLoad();
+		// if (mpi_myself == 0 && nthreads > 1)
+		// {
+		// 	std::ostringstream msg;
+		// 	msg << "          Time rebalancing load             " << ((double) CLOCK() - t0) << "\n";
+		// 	this->ScreenMessage(msg.str().c_str());
+		// }
 	}
 	catch (...)
 	{
