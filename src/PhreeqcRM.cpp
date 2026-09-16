@@ -5553,6 +5553,7 @@ IRM_RESULT
 PhreeqcRM::HandleErrorsInternal2(std::vector< std::pair<int, int> > &rtn)
 /* ---------------------------------------------------------------------- */
 {
+	// {thread, result}
 	// Check for errors
 	this->error_count = 0;
 
@@ -9979,9 +9980,10 @@ PhreeqcRM::RunCells()
 			// r_vector[n] = RunCellsThread(n);
 		}
 
-		#pragma omp parallel for num_threads(this->nthreads) schedule(dynamic, 4)
+		#pragma omp parallel for num_threads(this->nthreads) schedule(static)
 		for (int i = 0; i < this->nxyz; ++i) {
-			r_vector[i] = RunCell(i);
+			int n = omp_get_thread_num();
+			r_vector[i] = {n, RunCell(n, i)};
 		}
 
 		for (int n = 0; n < this->nthreads; n++)
@@ -10393,8 +10395,7 @@ void PhreeqcRM::AfterRunCellsThread(int n) {
 	}
 }
 
-std::pair<int,IRM_RESULT> PhreeqcRM::RunCell(int i) {
-	int n = omp_get_thread_num();
+IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
 	printf("Thread %d: Cell %d starts\n", n, i);
 	IPhreeqcPhast *phast_iphreeqc_worker = this->GetWorkers()[n];
 	int j;
@@ -10576,7 +10577,7 @@ std::pair<int,IRM_RESULT> PhreeqcRM::RunCell(int i) {
 		return_value = IRM_FAIL;
 	}
 
-	return {n, return_value};
+	return return_value;
 }
 
 /* ---------------------------------------------------------------------- */
