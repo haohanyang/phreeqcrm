@@ -122,19 +122,8 @@ add_executable(TestRM)
 
 # TestRM C/CXX source
 target_sources(TestRM PRIVATE
-  AdvectBMI_cpp.cpp
-  AdvectBMI_cpp_test.cpp
-  Advect_c.c
-  Advect_cpp.cpp
-  Gas_c.c
-  Gas_cpp.cpp
   main.cpp
-  SimpleAdvect_c.c
   SimpleAdvect_cpp.cpp
-  Species_c.c
-  Species_cpp.cpp
-  TestAllMethods_c.c
-  TestAllMethods_cpp.cpp
 )
 
 if(PHREEQCRM_WITH_YAML_CPP)

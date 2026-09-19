@@ -10,12 +10,7 @@
 */
 #if !defined(PHREEQCRM_H_INCLUDED)
 #define PHREEQCRM_H_INCLUDED
-#ifdef USE_MPI
-#include "mpi.h"
-#define MP_TYPE MPI_Comm
-#else
 #define MP_TYPE int
-#endif
 
 // forward declarations
 class cxxNameDouble;
@@ -287,36 +282,6 @@ private:
 	virtual void GenerateAutoOutputVars();
 	virtual void UpdateBMI(RMVARS v_enum);
 public:
-#ifdef USE_YAML
-/**
-@a GetGridCellCountYAML will read the YAML file and extract the value
-of GridCellCount, which can be used to construct a PhreeqcRM
-instance. The constructor for a PhreeqcRM instance requires a 
-value for the number of cells. If a GUI or preprocessor is
-used to write a YAML file to initialize PhreeqcRM, the number
-of cells can be written to the YAML file and extracted with
-this method.
-@param YAML_file         String containing the YAML file name.
-@retval Number of grid cells specified in the YAML file; returns
-zero if GridCellCount is not defined.
-@see @ref InitializeYAML @ref PhreeqcRM.
-@par C++ Example:
-@htmlonly
-<CODE>
-<PRE>
-int nthreads = 0;
-std::string yaml_file = "myfile.yaml";
-int nxyz = PhreeqcRM::GetGridCellCountYAML(yaml_file);
-PhreeqcRM phreeqc_rm(nxyz, nthreads);
-phreeqc_rm.InitializeYAML(yaml_file);
-</PRE>
-</CODE>
-@endhtmlonly
-@par Sequence:
-Called before PhreeqcRM is created.
-*/
-	static int GetGridCellCountYAML(const char* YAML_file);
-#endif // #ifdef USE_YAML
 
 /**
  * @mainpage PhreeqcRM Library Documentation (@PHREEQC_VER@-@REVISION_SVN@)
@@ -3282,128 +3247,6 @@ int iphreeqc_result = w[0]->RunAccumulated();
 Called by root and (or) workers.
  */
 	const std::vector<IPhreeqcPhast *> &      GetWorkers() {return this->workers;}
-#ifdef USE_YAML
-/**
-A YAML file can be used to initialize an instance of PhreeqcRM. 
-@param yamlfile         String containing the YAML file name.
-@retval IRM_RESULT      0 is success, negative is failure (See @ref DecodeError).
-
-The file contains a YAML map of PhreeqcRM methods
-and the arguments corresponding to the methods. For example,
-@htmlonly
-<CODE>
-<PRE>
-- key: LoadDatabase
-  database: phreeqc.dat
-- key: RunFile
-  workers: true
-  initial_phreeqc: true
-  utility: true
-  chemistry_name: advect.pqi
-</PRE>
-</CODE>
-@endhtmlonly
-
-@ref InitializeYAML will read the YAML file and execute the specified methods with 
-the specified arguments. Using YAML
-terminology, the argument(s) for a method may be a scalar, a sequence, or a map, 
-depending if the argument is
-a single item, a single vector, or there are multiple arguments. 
-In the case of a map, the names associated
-with each argument (for example "chemistry_name" above) is arbitrary. 
-The names of the map keys for map
-arguments are not used in parsing the YAML file; only the order of 
-the arguments is important.
-
-The class YAMLPhreeqcRM can be used to write a YAML file.
-The methods defined in the YAMLPhreeqcRM class include the
-following list; 
-all but SetGridCellCount correspond to PhreeqcRM methods.
-@htmlonly
-<CODE>
-<PRE>
-CloseFiles(void);
-CreateMapping(std::vector< int >& grid2chem);
-DumpModule();
-FindComponents();
-InitialEquilibriumPhases2Module(std::vector< int > equilibrium_phases);
-InitialExchanges2Module(std::vector< int > exchanges);
-InitialGasPhases2Module(std::vector< int > gas_phases);
-InitialKineticss2Module(std::vector< int > kinetics);
-InitialSolidSolutions2Module(std::vector< int > solid_solutions);
-InitialSolutions2Module(std::vector< int > solutions);
-InitialSurfaces2Module(std::vector< int > surfaces);
-InitialPhreeqc2Module(std::vector< int > initial_conditions1);
-InitialPhreeqc2Module(std::vector< int > initial_conditions1, std::vector< int > initial_conditions2, std::vector< double > fraction1);
-InitialPhreeqcCell2Module(int n, std::vector< int > cell_numbers);
-LoadDatabase(std::string database);
-OpenFiles(void);
-OutputMessage(std::string str);
-RunCells(void);
-RunFile(bool workers, bool initial_phreeqc, bool utility, std::string chemistry_name);
-RunString(bool workers, bool initial_phreeqc, bool utility, std::string input_string);
-ScreenMessage(std::string str);
-SetComponentH2O(bool tf);
-SetConcentrations(std::vector< double > c);
-SetCurrentSelectedOutputUserNumber(int n_user);
-SetDensityUser(std::vector< double > density);
-SetDumpFileName(std::string dump_name);
-SetErrorHandlerMode(int mode);
-SetErrorOn(bool tf);
-SetFilePrefix(std::string prefix);
-SetGasCompMoles(std::vector< double > gas_moles);
-SetGasPhaseVolume(std::vector< double > gas_volume);
-SetGridCellCount(int nxyz);
-SetPartitionUZSolids(bool tf);
-SetPorosity(std::vector< double > por);
-SetPressure(std::vector< double > p);
-SetPrintChemistryMask(std::vector< int > cell_mask);
-SetPrintChemistryOn(bool workers, bool initial_phreeqc, bool utility);
-SetRebalanceByCell(bool tf);
-SetRebalanceFraction(double f);
-SetRepresentativeVolume(std::vector< double > rv);
-SetSaturationUser(std::vector< double > sat);
-SetScreenOn(bool tf);
-SetSelectedOutputOn(bool tf);
-SetSpeciesSaveOn(bool save_on);
-SetTemperature(std::vector< double > t);
-SetTime(double time);
-SetTimeConversion(double conv_factor);
-SetTimeStep(double time_step);
-SetUnitsExchange(int option);
-SetUnitsGasPhase(int option);
-SetUnitsKinetics(int option);
-SetUnitsPPassemblage(int option);
-SetUnitsSolution(int option);
-SetUnitsSSassemblage(int option);
-SetUnitsSurface(int option);
-SpeciesConcentrations2Module(std::vector< double > species_conc);
-StateSave(int istate);
-StateApply(int istate);
-StateDelete(int istate);
-UseSolutionDensityVolume(bool tf);
-WarningMessage(std::string warnstr);
-</PRE>
-</CODE>
-@endhtmlonly
-
-@par C++ Example:
-@htmlonly
-<CODE>
-<PRE>
-int nthreads = 0;
-std::string yaml_file = "myfile.yaml";
-int nxyz = GetGridCellCountYAML(yaml_file);
-PhreeqcRM phreeqc_rm(nxyz, nthreads);
-phreeqc_rm.InitializeYAML(yaml_file);
-</PRE>
-</CODE>
-@endhtmlonly
-@par MPI:
-Called by root, workers must be in the loop of @ref MpiWorker.
-*/
-IRM_RESULT		InitializeYAML(std::string yamlfile);
-#endif
 /**
 Fills a vector (@a destination_c) with concentrations from solutions in the InitialPhreeqc instance.
 The method is used to obtain concentrations for boundary conditions. If a negative value
@@ -5862,9 +5705,6 @@ protected:
 	bool delete_phreeqcrm_io;
 
 	// mpi
-#ifdef USE_MPI
-	MPI_Comm phreeqcrm_comm;                                       // MPI communicator
-#endif
 	int (*mpi_worker_callback_fortran) (int *method);
 	int (*mpi_worker_callback_c) (int *method, void *cookie);
 	void *mpi_worker_callback_cookie;

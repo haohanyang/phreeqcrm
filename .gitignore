@@ -78,3 +78,7 @@ builds/
 
 # CMakePresets build directories
 out/build/
+
+venv/
+zlib/
+profile_output*
