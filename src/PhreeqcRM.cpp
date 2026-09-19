@@ -17,6 +17,7 @@
 #include "Serializer.h"
 #include "StorageBin.h"
 #include <assert.h>
+#include <atomic>
 #include "System.h"
 #include "BMIVariant.h"
 #include "VarManager.h"
@@ -4477,18 +4478,11 @@ PhreeqcRM::RebalanceLoadPerCell(void)
 	}
 
 
-	for (size_t i = 0; i < (size_t) this->nthreads; i++)
-	{
-		IPhreeqcPhast * phast_iphreeqc_worker = this->workers[i];
-		std::vector<double>::const_iterator cit;
-		for (cit = phast_iphreeqc_worker->Get_cell_clock_times().begin();
-			cit != phast_iphreeqc_worker->Get_cell_clock_times().end();
-			cit++)
-		{
-			recv_cell_times.push_back(*cit);
-		}
-		phast_iphreeqc_worker->Get_cell_clock_times().clear();
-	}
+	// Per-cell times are recorded directly by global chemistry cell number in RunCell
+	// (this->cell_clock_times), since work stealing means a cell may be computed by a
+	// worker other than its official owner -- so times can no longer be reconstructed by
+	// concatenating each worker's own local list in range order.
+	recv_cell_times = this->cell_clock_times;
 	// Root normalizes times, calculates efficiency, rebalances work
 	double normalized_total_time = 0;
 	double max_task_time = 0;
@@ -4759,18 +4753,77 @@ PhreeqcRM::RunCells()
 			phast_iphreeqc_worker->Set_punch_stream(new std::ostringstream);
 		}
 		std::vector <std::pair<int,int> > r_vector;
-		r_vector.resize(this->nxyz);
+		r_vector.resize(this->count_chemistry);
+
+		this->cell_clock_times.assign(this->count_chemistry, 0.0);
+		this->cell_output_text.assign(this->count_chemistry, std::string());
+		this->cell_needs_end_row.assign(this->count_chemistry, 0);
+		this->cell_selected_output_data.assign(this->count_chemistry, std::map<int, SelectedOutputRow>());
 
 		for (int n = 0; n < this->nthreads; n++)
 		{
 			BeforeRunCellsThread(n);
 		}
 
-		#pragma omp parallel for num_threads(this->nthreads) schedule(dynamic)
-		for (int i = 0; i < this->nxyz; ++i) {
-			int n = omp_get_thread_num();
-			r_vector[i] = {n, RunCell(n, i)};
+		// Work stealing: each worker claims cells from its own range (start_cell/end_cell)
+		// first. Once its own range is exhausted, it helps whichever other worker still
+		// has unclaimed cells, migrating that one cell's chemistry state into its own
+		// worker to compute it, then back again -- so no thread sits idle while another
+		// works through a long backlog. Cells are still claimed via a monotonically
+		// increasing per-worker cursor, so a given worker's range is always processed in
+		// increasing cell order regardless of which thread ends up doing the work.
+		std::vector<std::atomic<int>> next_cell(this->nthreads);
+		for (int n = 0; n < this->nthreads; n++)
+		{
+			next_cell[n].store(this->start_cell[n]);
 		}
+		std::vector<std::mutex> worker_mutex(this->nthreads);
+
+		#pragma omp parallel num_threads(this->nthreads)
+		{
+			int me = omp_get_thread_num();
+			while (true)
+			{
+				int i = next_cell[me].fetch_add(1);
+				if (i <= this->end_cell[me])
+				{
+					IRM_RESULT rr;
+					{
+						std::lock_guard<std::mutex> lock(worker_mutex[me]);
+						rr = RunCell(me, i);
+					}
+					r_vector[i] = {me, rr};
+					continue;
+				}
+
+				// Own range exhausted; look for another worker with remaining work.
+				int victim = -1;
+				for (int v = 0; v < this->nthreads; v++)
+				{
+					if (v == me) continue;
+					if (next_cell[v].load() <= this->end_cell[v])
+					{
+						victim = v;
+						break;
+					}
+				}
+				if (victim == -1) break;   // no more work anywhere
+
+				int j = next_cell[victim].fetch_add(1);
+				if (j > this->end_cell[victim]) continue;   // lost the race, try again
+
+				MigrateCell(victim, me, j, worker_mutex);
+				IRM_RESULT rr;
+				{
+					std::lock_guard<std::mutex> lock(worker_mutex[me]);
+					rr = RunCell(me, j);
+				}
+				MigrateCell(me, victim, j, worker_mutex);
+				r_vector[j] = {me, rr};
+			}
+		}
+
+		this->ReassembleRunCellsOutput();
 
 		for (int n = 0; n < this->nthreads; n++)
 		{
@@ -4930,13 +4983,18 @@ void PhreeqcRM::AfterRunCellsThread(int n) {
 }
 
 IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
-	printf("Thread %d: Cell %d starts\n", n, i);
+	// Note: worker n may not be cell i's official owner (start_cell/end_cell) -- work
+	// stealing in RunCells can migrate a cell's chemistry state into any idle worker to
+	// compute it. Because of that, output that normally accumulates directly on the
+	// executing worker (print-chemistry text, selected output rows) is instead buffered
+	// here per chemistry cell, and committed to the *owning* worker, in cell order, by
+	// ReassembleRunCellsOutput after the parallel region completes.
 	IPhreeqcPhast *phast_iphreeqc_worker = this->GetWorkers()[n];
 	int j;
 
 	IRM_RESULT return_value = IRM_OK;
 
-	try { 
+	try {
 		bool pr_chemistry_on;
 		if (n < this->nthreads)
 		{
@@ -4950,15 +5008,11 @@ IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
 		{
 			pr_chemistry_on = print_chemistry_on[2];
 		}
-		std::vector<int> types;
-		std::vector<long> longs;
-		std::vector<double> doubles;
-		std::string strings;
 		int local_chem_mask;
 		bool calculation_success = true;
 
 		j = backward_mapping[i][0];			/* j is nxyz number */
-		phast_iphreeqc_worker->Get_cell_clock_times().push_back(- omp_get_wtime());
+		double cell_t0 = omp_get_wtime();
 		local_chem_mask = this->print_chem_mask_root[j];
 		// Set local print flags
 		bool pr_chem = pr_chemistry_on && (local_chem_mask != 0);
@@ -5020,31 +5074,21 @@ IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
 					line_buff << backward_mapping[i][ib] << " ";
 				}
 				line_buff << "\n";
-				*phast_iphreeqc_worker->Get_out_stream() << line_buff.str();
-				*phast_iphreeqc_worker->Get_out_stream() << phast_iphreeqc_worker->GetOutputString();
+				line_buff << phast_iphreeqc_worker->GetOutputString();
+				this->cell_output_text[i] = line_buff.str();
 			}
 
-			// Save selected output data
+			// Save selected output data (buffered; committed to the owning worker in
+			// ReassembleRunCellsOutput)
 			if (this->selected_output_on)
 			{
-				// Add selected output values to IPhreeqcPhast CSelectedOutputMap's
 				std::map< int, CSelectedOutput* >::iterator it = phast_iphreeqc_worker->SelectedOutputMap.begin();
 				for ( ; it != phast_iphreeqc_worker->SelectedOutputMap.end(); it++)
 				{
 					int n_user = it->first;
-					std::map< int, CSelectedOutput >::iterator ipp_it = phast_iphreeqc_worker->CSelectedOutputMap.find(n_user);
 					assert(it->second->GetRowCount() == 2);
-					if (ipp_it == phast_iphreeqc_worker->CSelectedOutputMap.end())
-					{
-						std::cerr << "Did not find item in CSelectedOutputMap" << std::endl;
-						throw PhreeqcRMStop();
-					}
-					types.clear();
-					longs.clear();
-					doubles.clear();
-					strings.clear();
-					it->second->Serialize(0, types, longs, doubles, strings);
-					ipp_it->second.DeSerialize(types, longs, doubles, strings);
+					SelectedOutputRow &row = this->cell_selected_output_data[i][n_user];
+					it->second->Serialize(0, row.types, row.longs, row.doubles, row.strings);
 				}
 			}
 		} // end active and calculation_success
@@ -5068,23 +5112,16 @@ IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
 				{
 					line_buff << "\nCalculation failure.\n";
 				}
-				*phast_iphreeqc_worker->Get_out_stream() << line_buff.str();
+				this->cell_output_text[i] = line_buff.str();
 			}
-			// Get selected output
+			// Selected output for a dry/failed cell is just a blank row, applied to the
+			// owning worker's CSelectedOutput objects in ReassembleRunCellsOutput.
 			if (this->selected_output_on)
 			{
-				// Add selected output values to IPhreeqcPhast CSelectedOutputMap
-				std::map< int, CSelectedOutput* >::iterator it = phast_iphreeqc_worker->SelectedOutputMap.begin();
-				for ( ; it != phast_iphreeqc_worker->SelectedOutputMap.end(); it++)
-				{
-					int iso = it->first;
-					std::map< int, CSelectedOutput >::iterator ipp_it = phast_iphreeqc_worker->CSelectedOutputMap.find(iso);
-					ipp_it->second.EndRow();
-				}
+				this->cell_needs_end_row[i] = 1;
 			}
 		}
-		printf("Thread %d: Cell %d ends\n", n, i);
-		phast_iphreeqc_worker->Get_cell_clock_times().back() += omp_get_wtime();
+		this->cell_clock_times[i] = omp_get_wtime() - cell_t0;
 
 	} catch (PhreeqcRMStop) {
 		return_value = IRM_FAIL;
@@ -5096,6 +5133,80 @@ IRM_RESULT PhreeqcRM::RunCell(int n, int i) {
 	}
 
 	return return_value;
+}
+
+/* ---------------------------------------------------------------------- */
+void
+PhreeqcRM::MigrateCell(int from, int to, int i, std::vector<std::mutex> &worker_mutex)
+/* ---------------------------------------------------------------------- */
+{
+	// Move cell i's chemistry state (solution, exchange, kinetics, ...) from worker
+	// "from" to worker "to". Used by RunCells to let an idle worker compute a cell that
+	// is officially owned by a busier worker (work stealing). Never holds two worker
+	// locks at once, so this cannot deadlock against a concurrent migration in the
+	// opposite direction.
+	cxxStorageBin bin;
+	{
+		std::lock_guard<std::mutex> lock(worker_mutex[from]);
+		this->workers[from]->Get_PhreeqcPtr()->phreeqc2cxxStorageBin(bin, i);
+		std::ostringstream del;
+		del << "DELETE; -cell " << i << "\n";
+		this->workers[from]->RunString(del.str().c_str());
+	}
+	{
+		std::lock_guard<std::mutex> lock(worker_mutex[to]);
+		this->workers[to]->Get_PhreeqcPtr()->cxxStorageBin2phreeqc(bin, i);
+	}
+}
+
+/* ---------------------------------------------------------------------- */
+void
+PhreeqcRM::ReassembleRunCellsOutput(void)
+/* ---------------------------------------------------------------------- */
+{
+	// A cell computed by a helper worker (work stealing) left its print-chemistry text
+	// and selected-output row in the per-cell buffers filled by RunCell, rather than on
+	// the executing worker directly. Commit them here into the *owning* worker's
+	// out_stream / CSelectedOutputMap, walking each worker's official range in
+	// increasing cell order -- exactly the order/layout the rest of PhreeqcRM
+	// (GetSelectedOutput, CheckSelectedOutput, the print-chemistry file) assumes.
+	for (int n = 0; n < this->nthreads; n++)
+	{
+		IPhreeqcPhast *worker = this->workers[n];
+		for (int i = this->start_cell[n]; i <= this->end_cell[n]; i++)
+		{
+			if (!this->cell_output_text[i].empty())
+			{
+				*worker->Get_out_stream() << this->cell_output_text[i];
+			}
+			if (this->selected_output_on)
+			{
+				if (this->cell_needs_end_row[i])
+				{
+					std::map< int, CSelectedOutput >::iterator ipp_it = worker->CSelectedOutputMap.begin();
+					for (; ipp_it != worker->CSelectedOutputMap.end(); ipp_it++)
+					{
+						ipp_it->second.EndRow();
+					}
+				}
+				else
+				{
+					std::map<int, SelectedOutputRow>::iterator row_it = this->cell_selected_output_data[i].begin();
+					for (; row_it != this->cell_selected_output_data[i].end(); row_it++)
+					{
+						int n_user = row_it->first;
+						std::map< int, CSelectedOutput >::iterator ipp_it = worker->CSelectedOutputMap.find(n_user);
+						if (ipp_it == worker->CSelectedOutputMap.end())
+						{
+							std::cerr << "Did not find item in CSelectedOutputMap" << std::endl;
+							throw PhreeqcRMStop();
+						}
+						ipp_it->second.DeSerialize(row_it->second.types, row_it->second.longs, row_it->second.doubles, row_it->second.strings);
+					}
+				}
+			}
+		}
+	}
 }
 
 /* ---------------------------------------------------------------------- */

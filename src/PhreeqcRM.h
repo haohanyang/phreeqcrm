@@ -5603,6 +5603,7 @@ private:
 	void                                      RebalanceLoadPerCell(void);
 	IRM_RESULT                                RunCellsThread(int i);
 	IRM_RESULT                                RunCell(int n, int i);
+	void                                      MigrateCell(int from, int to, int i, std::vector<std::mutex> &worker_mutex);
 	void                                      BeforeRunCellsThread(int n);
 	void                                      AfterRunCellsThread(int n);
 	IRM_RESULT                                RunFileThread(int n);
@@ -5724,6 +5725,22 @@ protected:
 
 	std::vector< int > start_cell;
 	std::vector< int > end_cell;
+	std::vector< double > cell_clock_times;    // elapsed time of last RunCells call, indexed by chemistry cell number
+
+	// RunCells work stealing: a cell's chemistry may be computed by a worker other than its official
+	// owner (start_cell/end_cell), so results are buffered per chemistry cell during the parallel
+	// region, then committed into the owning worker's storage, in cell order, by ReassembleRunCellsOutput.
+	struct SelectedOutputRow
+	{
+		std::vector<int> types;
+		std::vector<long> longs;
+		std::vector<double> doubles;
+		std::string strings;
+	};
+	std::vector< std::string > cell_output_text;                        // buffered print-chemistry text
+	std::vector< char > cell_needs_end_row;                             // 1 if cell was dry/failed (needs CSelectedOutput::EndRow)
+	std::vector< std::map<int, SelectedOutputRow> > cell_selected_output_data;  // keyed by selected-output user number
+	void ReassembleRunCellsOutput(void);
 	// reactant lists
 	std::vector <std::string> ExchangeSpeciesNamesList;
 	std::vector <std::string> ExchangeNamesList;
