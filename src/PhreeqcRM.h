@@ -10,12 +10,7 @@
 */
 #if !defined(PHREEQCRM_H_INCLUDED)
 #define PHREEQCRM_H_INCLUDED
-#ifdef USE_MPI
-#include "mpi.h"
-#define MP_TYPE MPI_Comm
-#else
 #define MP_TYPE int
-#endif
 
 // forward declarations
 class cxxNameDouble;
@@ -5862,9 +5857,6 @@ protected:
 	bool delete_phreeqcrm_io;
 
 	// mpi
-#ifdef USE_MPI
-	MPI_Comm phreeqcrm_comm;                                       // MPI communicator
-#endif
 	int (*mpi_worker_callback_fortran) (int *method);
 	int (*mpi_worker_callback_c) (int *method, void *cookie);
 	void *mpi_worker_callback_cookie;
